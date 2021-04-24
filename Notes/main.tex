@@ -1,3 +1,4 @@
+%% TeX-command-extra-options: "-shell-escape"
 \documentclass[11pt]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
@@ -21,15 +22,16 @@
 \usepackage{sectsty}
 \usepackage{engord}
 \usepackage{parskip}
-\usepackage{minted}
 \usepackage{graphicx}
 \usepackage{subcaption}
 \usepackage{setspace}
 \usepackage{placeins}
 \usepackage{color}
+\usepackage{float}
 \usepackage{bm}
 \usepackage{pdfpages}
 \usepackage{natbib}
+\usepackage[ruled,vlined]{algorithm2e}
 
 \usepackage{graphicx} % Inclusión de imágenes.
 \usepackage{grffile}  % Distintos formatos para imágenes.
@@ -48,6 +50,9 @@
 \author{Luis Antonio Ortega Andrés}
 \date{\today}
 \title{Bayesian methods}
+
+\DeclareMathOperator*{\argmin}{arg\,min} % thin space, limits underneath in displays
+\DeclareMathOperator*{\argmax}{arg\,max} % thin space, limits underneath in displays
 
 \newcommand*{\QED}{\null\nobreak\hfill\ensuremath{\square}}%
 
@@ -361,7 +366,290 @@ Where its partial derivatives cannot be independently optimized.
 \subsection{EM algorithm}
 The EM algorithm performs maximum likelihood estimation in probabilistic models with missing data. Its main idea is to follow a two-step iterative process where, the first computes the expected value of the missing data and the second optimized the set of parameters.
 
+Given a set of observed variables \( \bm{X} = (X_1,\dots, X_N) \) and a set of hidden or latent variables \( \bm{Z} = (Z_1, \dots, Z_M) \), governed by a set of parameters \( \bm{\theta} \), the EM algorithm seeks to find the maximum likelihood estimate of the marginal likelihood \( P(\bm{x} \mid \bm{\theta}) \)  of the visible variables by applying the following 2-step iterative procedure:
+\begin{enumerate}
+  \item \textbf{Expectation step}: Define \( Q(\bm{\theta} \mid \bm{\theta}^{(t)} \) as the expected value of the log likelihood with respect to the conditional distribution  of the hidden variables given the observed:
+  \[
+       Q(\bm{\theta} \mid \bm{\theta}^{(t)}) = \mathbb{E}_{\bm{Z} \mid \bm{x}, \bm{\theta}^{(t)}} \left[ \log P(\bm{x}, \bm{Z} \mid \bm{\theta}) \right].
+  \]
+  \item \textbf{Maximization step}: Find the optimal parameters that maximize \( Q \):
+  \[
+       \bm{\theta}^{(t+1)} = \argmax_{\bm{\theta}} Q(\bm{\theta} \mid \bm{\theta}^(t)).
+  \]
+\end{enumerate}
 
+\textbf{Theorem. }The marginal likelihood cannot be decreased after any iteration of the expectation maximization algorithm.
+
+\emph{Proof. } For any unknown but fixed value of the hidden variables \( \bm{z} \), we can write\footnote{Given that \( P(\bm{z} \mid \bm{x}, \bm{\theta}) \neq 0\).  }
+\[
+     \log P(\bm{x} \mid \bm{\theta}) = \log P(\bm{x}, \bm{z} \mid \bm{\theta}) - \log P(\bm{z} \mid \bm{x}, \bm{\theta})
+\]
+By taking expectations over \( \bm{Z} \mid \bm{x}, \bm{\theta}^{(t)} \), we get that
+\[
+    \begin{aligned}
+\log P(\bm{x} \mid \bm{\theta}) &= \mathbb{E}_{\bm{Z} \mid \bm{x}, \bm{\theta}^{(t)}} \left[ \log P(\bm{x}, \bm{Z} \mid \bm{\theta}) \right] - \mathbb{E}_{\bm{Z} \mid \bm{x}, \bm{\theta}^{(t)}} \left[ \log P(\bm{Z} \mid \bm{x}, \bm{\theta}) \right]\\
+        &= Q(\bm{\theta}, \bm{\theta}^{(t)}) - \mathbb{E}_{\bm{Z} \mid \bm{x}, \bm{\theta}^{(t)}} \left[ \log P(\bm{Z} \mid \bm{x}, \bm{\theta}) \right]
+    \end{aligned}
+\]
+Given this quality, the increase in the marginal likelihood is
+\[
+    \begin{aligned}
+     \log P(\bm{x} \mid \bm{\theta}) - \log P(\bm{x} \mid \bm{\theta}^{(t)}) &= 
+ Q(\bm{\theta}, \bm{\theta}^{(t)}) -  Q(\bm{\theta}^{(t)}, \bm{\theta}^{(t)})\\
+ & - \mathbb{E}_{\bm{Z} \mid \bm{x}, \bm{\theta}^{(t)}} \left[ \log P(\bm{Z} \mid \bm{x}, \bm{\theta})\right] + \mathbb{E}_{\bm{Z} \mid \bm{x}, \bm{\theta}^{(t)}} \left[ \log P(\bm{Z} \mid \bm{x}, \bm{\theta}^{(t)}) \right]\\
+&=  Q(\bm{\theta}, \bm{\theta}^{(t)}) -  Q(\bm{\theta}^{(t)}, \bm{\theta}^{(t)}) + KL\left(  P(\bm{Z} \mid \bm{x}, \bm{\theta}^{(t)}) \bigl\vert  P(\bm{Z} \mid \bm{x}, \bm{\theta})\right)
+    \end{aligned}
+\]
+Using that the KL divergence is always positive, we arrive at
+\[
+      \log P(\bm{x} \mid \bm{\theta}^{(t+1)}) - \log P(\bm{x} \mid \bm{\theta}^{(t)}) \geq  Q(\bm{\theta}^{(t+1)}, \bm{\theta}^{(t)}) -  Q(\bm{\theta}^{(t)}, \bm{\theta}^{(t)}) \geq 0.
+\]
+Where the last inequality is given by the maximization step of the EM algorithm.
+\hfill \( \blacksquare \) 
+
+\subsection{EM algorithm for Bayesian networks}
+
+Let us take a look at each of the steps given the Bayesian network structure, given that we now have to distinguish 3 types of variables, we are changing the notation. Let \( \bm{X} = (X_1, \dots, X_N ) \) and \( \bm{\theta} \) define the Bayesian network 
+\[
+     P(\bm{x} \mid \bm{\theta}) = \prod_{n=1}^N P(x_n \mid pa(x_n), \bm{\theta}),
+\]  
+and \( \bm{X} = \bm{V} \cup \bm{H} \) where \( \bm{V} \) is the set of visible or observed variables and \( \bm{H} \) is the set of latent variables. 
+
+\[
+    Q(\bm{\theta} \mid \bm{\theta}^{(t)}) = \mathbb{E}_{\bm{H} \mid \bm{v}, \bm{\theta}^{(t)}} \left[ \log P(\bm{x} \mid \bm{\theta}) \right].
+\]
+The first thing to notice is that 
+\[
+    \log P(\bm{x} \mid \bm{\theta}) = \sum_{n=1}^N \log P(x_n \mid pa(x_n), \bm{\theta}).
+\]
+Which implies
+\[
+    \mathbb{E}_{\bm{H} \mid \bm{v}, \bm{\theta}^{(t)}} \left[ \log P(\bm{x} \mid \bm{\theta}) \right] = \sum_{n=1}^N\mathbb{E}_{\bm{H} \mid \bm{v}, \bm{\theta}^{(t)}} \left[ \log P(x_n \mid pa(x_n), \bm{\theta})\right].
+\]
+Where such expectation does only affect those terms of the network where either \( x_n \) is hidden or there is a hidden variable in \( pa(x_n) \). 
+
+Assuming that each parameters models the probability of a certain factor as
+\[
+     \theta_n = P(x_n \mid pa(x_n)),
+\]
+these can be optimized separately.
+
+
+\begin{algorithm}[t]
+  \SetAlgoLined\KwData{A dataset \(\bm{v} = \{v^{1},\dots, v^{N}\}\), a distribution \(P(\bm{x} \mid \bm{\theta}) = P(\bm{v}, \bm{h} \mid \bm{\theta})\) that factorizes in a Bayesian network.}
+  \KwResult{The maximum likelihood estimates for \(\theta_{x_{m}} = P(x_{m}\mid pa(x_{m})), m=1,\dots,M\), }
+  Initialize \( \theta_{x_{m}}^{0}, m=1,\dots,M \)\;
+  \(t \leftarrow 0\)\;
+  \While{Convergence stop criteria}{
+    \For{\(n=1\) to \(N\)  }{
+      \(Q^{n}_{t}(h^{n}) = P(h^{n} \mid v^{n}, \bm{\theta}^{t})\)\tcp*{E-step}
+    }
+    \For{\(m=1\) to \(M\)  }{
+      \( \theta_{x_{m}}^{t+1} = \argmax_{\theta_{x_{m}}} \sum_{n=1}^{N}\mathbb{E}_{Q^{t}(h^{n})}[\log P(x_{m}^{n} \mid pa(x_{m}^{n}))]\)\tcp*{M-step}
+    }
+    \(t \leftarrow t+1 \)\;
+  }
+  \KwRet{\( \theta_{x_{m}}^{t}, \quad m=1,\dots,M  \)}\;
+  \caption{Expectation Maximization Algorithm for Bayesian networks}\label{alg:em_bn}
+\end{algorithm}
+
+Consider a model with three binary variables following
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+    node distance=1.5cm and 1.5cm,
+    mynode/.style={draw,circle,text width=0.5cm,align=center}
+    ]
+
+    \node[mynode] (1) {\(Y\)};
+    \node[mynode,above right=of 1] (2) {\(B\)};
+    \node[mynode,above left=of 1] (3) {\(A\)};
+
+    \path (2) edge[-latex] (1)
+    (3) edge[-latex] (1)
+    ;
+
+  \end{tikzpicture}
+\end{figure}
+
+With the following observations from \( A \) and \( Y \): \( (1,1), (0,0), (1,1), (1,0), (1,1), (1,0), (0,1) \).
+
+The \textbf{expectation step} of this model would compute
+\[
+  \begin{aligned}
+  Q^{1}(b) &= P(b \mid Y=1, A=1) \propto P(Y=1 \mid A=1, b)P(A=1)P(b) = \begin{cases}
+    \theta_{Y}^{1,0}\theta_{A}(1-\theta_{B}) &\text{ if } b = 0\\
+    \theta_{Y}^{1,1}\theta_{A}\theta_{B} &\text{ if } b = 1
+  \end{cases}\\
+  &\vdots\\
+   Q^{7}(b) &= P(b \mid Y=1, A=0) \propto P(Y=1 \mid A=0, b)P(A=0)P(b) = \begin{cases}
+    \theta_{Y}^{0,0}(1-\theta_{A})(1-\theta_{B}) &\text{ if } b = 0\\
+    \theta_{Y}^{1,0}(1-\theta_{A})\theta_{B} &\text{ if } b = 1
+  \end{cases}
+\end{aligned}
+\]
+On the other hand, the \textbf{maximization step} would optimize each parameter:
+\[
+  \begin{aligned}
+    \theta_{A}^{new} &= \argmax_{\theta_{A}} \sum_{i=1}^{7}\mathbb{E}_{Q^{i}(B)}[\log P(a_{i} \mid \theta_{A})]\\
+    &= \argmax_{\theta_{A}} \sum_{i=1}^{7} \sum_{b=0,1} Q^{i}(b) \log P(a_{i} \mid \theta_{A})\\
+    &= \argmax_{\theta_{A}} \sum_{i=1}^{7} Q^{i}(B = 0) \log P(a_{i} \mid \theta_{A}) +  Q^{i}(B = 1) \log P(a_{i} \mid \theta_{A}) \\
+    &= \argmax_{\theta_{A}} \sum_{i=1}^{7} \log P(a_{i} \mid \theta_{A}) = \argmax_{\theta_{A}} \log \left(\prod_{i=1}^{7}P(a_{i} \mid \theta_{A})\right)\\
+    &= \argmax_{\theta_{A}} \mathcal{L}(\theta_{A}; \mathcal{D}_{A}) = \frac{N_{A}}{N} = \frac{5}{7}
+    \end{aligned}
+\]
+
+
+\[
+  \begin{aligned}
+    \theta_{B}^{new} &= \argmax_{\theta_{B}} \sum_{i=1}^{7}\mathbb{E}_{Q^{i}(B)}[\log P(b_{i} \mid \theta_{B})]\\
+    &= \argmax_{\theta_{B}} \sum_{i=1}^{7} \left( Q^{i}(B = 0)\log P(B=0 \mid \theta_{B}) + Q^{i}(B = 1)\log P(B=1 \mid \theta_{B})  \right)\\
+    &=  \argmax_{\theta_{B}} \sum_{i=1}^{7} \left( Q^{i}(B = 0)\log (1-\theta_{B}) + Q^{i}(B = 1)\log \theta_{B})  \right)\\
+    &= \frac{\sum_{i=1}^{7} Q^{i}(B = 1)}{\sum_{i=1}^{7} Q^{i}(B = 0) + \sum_{i=1}^{7} Q^{i}(B = 1) } =  \frac{\sum_{i=1}^{7} Q^{i}(B = 1)}{N}
+    \end{aligned}
+\]
+
+
+
+\subsection{Gaussian mixture}
+
+A Gaussian mixture model considers the following variables:
+
+\begin{itemize}\setlength\itemsep{1em}
+  \item A corresponding set of observations \(\bm{x} = \{x_{1},\dots, x_{N}\}\).
+  \item The cluster assignment latent variables \(\bm{Z} = \{Z_{1}, \dots, Z_{N}\}\).
+  \item The mixture weights \(\bm{\pi} = \{\pi_{1},\dots,\pi_{K}\}\), i.e, prior probability of a particular component \(k\).
+  \item Each normal distribution \(\mathcal{N}(\mu_{k}, \Sigma_{k})\).
+\end{itemize}
+
+The joint probability factorizes as
+\[
+  P(\bm{x}, \bm{z}, \bm{\pi}, \bm{\mu}, \bm{\Sigma}) = P(\bm{x}\mid \bm{z}, \bm{\mu}, \bm{\Sigma})P(\bm{z}\mid \bm{\pi})P(\bm{\pi})P(\bm{\mu}\mid \bm{\Sigma})P(\bm{\Sigma}).
+\]
+
+We are now in situation to give the explicit Bayesian network for this model:
+
+\begin{figure}[h!]
+  \centering
+  \begin{tikzpicture}[
+    node distance=0.8cm and 1.5cm,
+    mynode/.style={draw,circle,text width=0.5cm,align=center},
+    hidden/.style={draw,circle,text width=0.8cm,align=center},
+    param/.style={draw,text width=0.5cm,align=center, fill={rgb:black,1;white,6;blue,0.5}}
+    ]
+
+    \node[mynode] (mu) {\(\bm{\mu}\)};
+    \node[mynode, right=of mu] (sigma) {\(\bm{\Lambda}\) };
+
+
+    \node[mynode, below =of sigma] (z) {\(Z_{n}\)};
+    \node[mynode, left =of z] (phi) {\(\bm{\pi}\)};
+    \node[mynode,fill={rgb:black,1;white,2}, right =of z] (x) {\(X_{n}\)};
+
+    \plate[inner sep=.3cm,xshift=.02cm,yshift=.2cm] {} {(z)(x)} {\(n=1,\dots,N\)}; %
+
+    \path (mu) edge[-latex] (x)
+    (sigma) edge[-latex] (x)
+    (sigma) edge[-latex] (mu)
+    (z) edge[-latex] (x)
+    (phi) edge[-latex] (z)
+    ;
+
+  \end{tikzpicture}
+  \caption{Gaussian mixture model. Squares represent hyper-parameters and \(X_{n}\) are observed. }\label{fig:gaussian_mixture}
+\end{figure}
+
+
+The complete log likelihood takes the form
+\[
+  \log P(\bm{x}, \bm{z} \mid \bm{\pi}, \bm{\mu}, \bm{\Sigma}) =\sum_{n=1}^{N}\sum_{k=1}^{K} \mathbb{I}[X_{i} = k] \left(\log \pi_{k} \log \mathcal{N}(x_{n};  \mu_{k}, \Sigma_{k}) \right).
+\]
+
+The expected value of the log-likelihood is
+\[
+  \begin{aligned}
+    Q(\lambda \mid \lambda^{new}) &= \mathbb{E}_{\bm{Z} \mid \bm{x}}[ \log P(\bm{x}, \bm{z} \mid \bm{\pi}, \bm{\mu}, \bm{\Sigma})]\\
+    &= \sum_{n=1}^{N}\sum_{k=1}^{K} \mathbb{E}_{\bm{Z} \mid \bm{x}}\left[ \mathbb{I}[X_{i} = k] \left(\log \pi_{k} \log \mathcal{N}(x_{n};  \mu_{k}, \Sigma_{k}) \right)\right]\\
+    &= \sum_{n=1}^{N}\sum_{k=1}^{K} \mathbb{E}_{\bm{Z} \mid \bm{x}}\left[ \mathbb{I}[X_{i} = k] \right] \left(\log \pi_{k} \log \mathcal{N}(x_{n};  \mu_{k}, \Sigma_{k}) \right)\\
+    &= \sum_{n=1}^{N}\sum_{k=1}^{K}P(Z_{n} = k \mid \bm{x})\left(\log \pi_{k} \log \mathcal{N}(x_{n};  \mu_{k}, \Sigma_{k}) \right)\\
+  \end{aligned}
+\]
+
+
+\section{Exact inference}
+
+
+Making bayesian inference refres to computing posterior probabilities. The main step at this task is to compute marginal probabilities
+\[
+  P(A) = \sum_{B,C}P(A, B, C)
+\]
+
+Twomain algorithms to compute marginal probabilities:
+\begin{itemize}
+  \item Variable elimination (VE).
+  \item Belief propagación (Sum-product).
+\end{itemize}
+
+\subsection{Variable elimination}
+
+Consider a un-normalized distribution
+\[
+  \phi(A,B,C,D) = \phi_{1}(A,B)\phi_{2}(B, C)\phi_{3}(C,D)\phi_{4}(D,A)
+\]
+Poner un grafo es un cuadrado.
+we aim to compute
+\[
+  \phi(A) = \sum_{B,C,D} \phi(A,B,C,D) =  \sum_{A,B,C} \phi_{1}(A,B)\phi_{2}(B, C)\phi_{3}(C,D)\phi_{4}(D,A) = \sum_{D}\phi_{4}(D,A)\sum_{C}\phi_{3}(C,D)\sum_{B}\phi_{1}(A,B)\phi_{2}(B, C)
+\]
+To this end, we compute the following factors
+\[
+  \tau_{1}(A,C) = \sum_{B}\underbrace{\phi_{1}(A,B)\phi_{2}(B, C)}_{\psi_{i}(A,B,C)}
+  \tau_{2}(A,D) = \sum_{C}\phi_{3}(C,D)\tau_{1}(A,C)
+  \phi(C) = \sum_{D}\phi_{4}(D,A)\tau_{2}(A,D)
+\]
+The cost is exponential in the size of the scope of the largest factor \( \psi_{i} \) .
+
+Suppose each variable is discrete with \( K \) possible values, the largest factor has \( 3 \) variables, that is, the cost is \( K^{3} \).
+
+\subsection{Belief propagation}
+
+Suppose we got a graph that is a tree. It allows to compute all marginals at once.
+(mirar algoritmo den las diapositivas).
+
+Those graphs where this algorithm can be applied must be cluster graphs:
+\begin{enumerate}
+  \item Undirected.
+  \item Each node \( C_{i} \subset \mathcal{X} \) is a subset of variables.
+  \item Edges contain separator sets \( i \to j, S_{ij} \subset C_{i} \cap C_{j} \).
+  \item Nodes contain an associated factor \( \psi_{i} \) with \( scope(\psi_{i}) \subset C_{i} \).
+  \item Satisfies the family preservation property:
+  \item Satisfies the general running intersection property:
+\end{enumerate}
+Given this, for each variable, there is an unique path that lets information flow.
+
+For the example given before:
+
+\subsubsection{Junction tree algorithm}
+
+\begin{enumerate}
+  \item Triangulation. Ensure that every loop of length 4 or more has a chord.
+  \item Junction tree: Tree of max-clique of the triangulated graph.
+  \item Potential assignments. Assign potentials to juntion tree cliques.
+ \item Find a tree that goes trough all cliques.
+\end{enumerate}
+
+\subsubsection{Variable elimination}
+
+\begin{enumerate}
+  \item A node \( C_{i} \) corresponds to each intermediate factor \( \psi_{i} \), \( C_{i} = scope(\psi_{i}) \).
+  \item A edge connects \( C_{i} \) and \( C_{j} \) if \( \tau_{i} \) is used to compute \( \psi_{j} \):
+        \[
+        S_{ij} = scope(\tau_{i}).
+        \]
+\end{enumerate}
+
+Each maximal clique form the juntion tree algorithm corresponds to an intermiate factor from the VE algorithm. This means that the resulting graphs are always similar.
 
 
 \clearpage
