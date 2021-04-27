@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from re import A
 import numpy as np
 
 from sklearn.base import BaseEstimator
@@ -62,7 +63,6 @@ class GaussianMixture(BaseEstimator):
         respect to the model) of the best fit of EM.
 
     """
-
     def __init__(
         self,
         n_components=1,
@@ -86,97 +86,108 @@ class GaussianMixture(BaseEstimator):
         ----------
         X : array-like of shape (n_samples, n_features)
         """
+        # Model is initialized but needs to be fitted
         self.fitted = False
         n_samples, _ = X.shape
 
+        # Initialize samples responsabilities, i.e. probability of each sample
+        # to belong to each component.
+        # Assign cluster using kmeans prediction
         if self.init_params == "kmeans":
             resp = np.zeros((n_samples, self.n_components))
             labels = KMeans(n_clusters=self.n_components, n_init=1,
                                    random_state=self.random_state).fit(X).labels_
             resp[np.arange(n_samples), labels] = 1
+        # Random initialization
         elif self.init_params == "random":
+            # Random initialization
             resp = np.random.default_rng(self.random_state).random((n_samples, self.n_components))
+            # Responsabilities are probabilities, i.e, must be normalized.
             resp /= resp.sum(axis=1)[:, np.newaxis]
-        elif self.init_params.shape == (n_samples, self.n_components):
+        # Use init_params as array of responsabilities
+        elif isinstance(self.init_params, np.ndarray) and \
+                self.init_params.shape == (n_samples, self.n_components):
             resp = self.init_params
         else: 
             raise ValueError("Unimplemented initialization method '%s'"
                 % self.init_params) 
+
+        # Compute weights, means and covariance matrixes using the initialized
+        # responsabilities
+        self.weights_, self.means_, self.covariances_ = \
+            self._estimate_gaussian_parameters(X, resp)
     
-        self.weights_, self.means_, self.covariances_ = self._estimate_gaussian_parameters(
-            X, resp, self.reg_covar)
-        self.weights_ /= n_samples
-    
+        # Pre-compute the cholesky decomposition of the covariance matrixes.
         self._compute_precision_cholesky()
             
             
-    def _estimate_gaussian_parameters(self, X, resp, reg_covar):
-        """Estimate the Gaussian distribution parameters.
+    def _estimate_gaussian_parameters(self, X, resp):
+        """Estimate the Gaussian mixture distribution parameters, that is, 
+        mixture weights, means and covariance matrixes.
+        
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
             The input data array.
         resp : array-like of shape (n_samples, n_components)
             The responsibilities for each data sample in X.
-        reg_covar : float
-            The regularization added to the diagonal of the covariance matrices.
 
         Returns
         -------
-        nk : array-like of shape (n_components,)
-            The numbers of data samples in the current components.
+        weights : array-like of shape (n_components,)
+            Probability of each component.
         means : array-like of shape (n_components, n_features)
             The centers of the current components.
         covariances : array-like
             The covariance matrix of the current components.
             The shape depends of the covariance_type.
         """
-        nk = resp.sum(axis=0)
-        means = np.dot(resp.T, X) / nk[:, np.newaxis]
+        _, n_components = resp.shape
+        n_samples, n_features = X.shape
+        
+        # Compute un-normalize probability of each component. Represents
+        # the probabilistic amount of samples in each component.
+        weights = resp.sum(axis=0)
 
-        n_components, n_features = means.shape
+        # Compute new means
+        means = np.dot(resp.T, X) / weights[:, np.newaxis]
+
         covariances = np.empty((n_components, n_features, n_features))
         for k in range(n_components):
             mean = X - means[k]
-            covariances[k] = np.dot(resp[:, k] * mean.T, mean) / nk[k]
+            # Compute covariances
+            covariances[k] = np.dot(resp[:, k] * mean.T, mean) / weights[k]
             # Add regularization term to avoid numerical issues
-            covariances[k].flat[:: n_features + 1] += reg_covar
+            covariances[k].flat[:: n_features + 1] += self.reg_covar
 
-        return nk, means, covariances
+        return weights/n_samples, means, covariances
     
     def _compute_precision_cholesky(self):
-        """Compute the Cholesky decomposition of the precisions.
-        Parameters
-        ----------
-        covariances : array-like
-            The covariance matrix of the current components.
-            The shape depends of the covariance_type.
-
-        Returns
-        -------
-        precisions_cholesky : array-like
-            The cholesky decomposition of sample precisions of the current
-            components. The shape depends of the covariance_type.
         """
-        estimate_precision_error_message = (
-            "Fitting the mixture model failed because some components have "
-            "ill-defined empirical covariance (for instance caused by singleton "
-            "or collapsed samples). Try to decrease the number of components, "
-            "or increase reg_covar.")
-
+        Compute the Cholesky decomposition of the precision matrixes.
+        """
         n_components, n_features, _ = self.covariances_.shape
         self.precisions_cholesky_ = np.empty((n_components, n_features, n_features))
         for k, covariance in enumerate(self.covariances_):
             try:
                 cov_chol = np.linalg.cholesky(covariance)
             except np.linalg.LinAlgError:
-                raise ValueError(estimate_precision_error_message)
+                raise ValueError( "Fitting the mixture model failed because"
+                                 "some components have ill-defined empirical"
+                                 "covariance (for instance caused by singleton"
+                                 " or collapsed samples). Try to decrease the "
+                                 "number of components, or increase reg_covar.")
+    
             self.precisions_cholesky_[k] = solve_triangular(cov_chol,
                                                          np.eye(n_features),
                                                          lower=True).T 
     
     def _estimate_log_gaussian_prob(self, X):
         """Estimate the log Gaussian probability.
+        ```
+         \log P(X | Z ) = -\frac{k}{2}\log (2\pi) - \frac{k}{2}\log det(\Sigma) 
+         - \frac{1}{2}(x- \mu)^T \Sigma^{-1}(x-\mu)
+        ```
         
         Parameters
         ----------
@@ -189,11 +200,10 @@ class GaussianMixture(BaseEstimator):
         n_samples, n_features = X.shape
         n_components, _ = self.means_.shape
         
-        log_det = (np.sum(np.log(
-            self.precisions_cholesky_.reshape(
-                n_components, -1)[:, ::n_features + 1]), 1))
+        # Logarithm of determinant of precision matrix.
+        log_det = np.log(np.linalg.det(self.precisions_cholesky_)) 
 
-    
+        # Compute quadratic form
         log_prob = np.empty((n_samples, n_components))
         for k, (mu, prec_chol) in enumerate(zip(self.means_, self.precisions_cholesky_)):
             y = np.dot(X, prec_chol) - np.dot(mu, prec_chol)
@@ -204,7 +214,7 @@ class GaussianMixture(BaseEstimator):
     def _estimate_weighted_log_prob(self, X):
         """ Estimate the weighted log probabilities for each sample.
             ```
-                \pi_k \mathcal{N}(x_k: \mu_k, \Sigma_k)
+                \log (\pi_k \mathcal{N}(x_k: \mu_k, \Sigma_k))
             ```
         Parameters
         ----------
@@ -219,9 +229,7 @@ class GaussianMixture(BaseEstimator):
 
     def _estimate_log_prob_resp(self, X):
         """Estimate log probabilities and responsibilities for each sample.
-        Compute the log probabilities, weighted log probabilities per
-        component and responsibilities for each sample in X with respect to
-        the current state of the model.
+        
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
@@ -264,12 +272,11 @@ class GaussianMixture(BaseEstimator):
             Logarithm of the posterior probabilities (or responsibilities) of
             the point of each sample in X.
         """
-        n_samples, _ = X.shape
-        
+       
         self.weights_, self.means_, self.covariances_ = self._estimate_gaussian_parameters(
-            X, np.exp(log_resp), self.reg_covar
+            X, np.exp(log_resp)
         )
-        self.weights_ /= n_samples
+
         self._compute_precision_cholesky()
 
     def fit(self, X, y=None):
