@@ -294,18 +294,22 @@ class GaussianMixture(BaseEstimator):
         -------
         self
         """
+        # Initialize model and lower bound
         self._initialize(X)
         self.converged_ = False
         prev_lower_bound = -np.infty
 
         for _ in range(self.max_iter):
-            log_prob_norm, log_resp = self._e_step(X)
+            # E-step
+            lower_bound, log_resp = self._e_step(X)
+            # M-step
             self._m_step(X, log_resp)
-            lower_bound = log_prob_norm
 
+            # Compute ELBO change
             change = lower_bound - prev_lower_bound
             prev_lower_bound = lower_bound
-
+            
+            # Check convergence criteria
             if abs(change) < self.tol:
                 self.converged_ = True
                 break
