@@ -18,6 +18,7 @@ import matplotlib.colors as colors
 from matplotlib.patches import Ellipse
 from PIL import Image
 import imageio
+
 class GaussianMixture(BaseEstimator):
     """Gaussian Mixture model solved using the Expectation maximization 
     algorithm.
@@ -289,7 +290,7 @@ class GaussianMixture(BaseEstimator):
     def fit(self, X, y=None):
         """Estimate model parameters with the EM algorithm.
         The method iterates between E-step and M-step for ``max_iter``
-        times until the change of likelihood or lower bound is less than
+        times until the change of likelihood is less than
         ``tol``, otherwise, a ``ConvergenceWarning`` is raised.
 
         Parameters
@@ -304,17 +305,19 @@ class GaussianMixture(BaseEstimator):
         # Initialize model and lower bound
         self._initialize(X)
         self.converged_ = False
-        prev_lower_bound = -np.infty
+        prev_log_prob = -np.infty
+        self.log_probs = []
 
         for _ in range(self.max_iter):
             # E-step
-            lower_bound, log_resp = self._e_step(X)
+            log_prob_norm, log_resp = self._e_step(X)
+            self.log_probs.append(log_prob_norm)
             # M-step
             self._m_step(X, log_resp)
 
             # Compute ELBO change
-            change = lower_bound - prev_lower_bound
-            prev_lower_bound = lower_bound
+            change = log_prob_norm - prev_log_prob
+            prev_log_prob = log_prob_norm 
             
             # Check convergence criteria
             if abs(change) < self.tol:
@@ -326,14 +329,30 @@ class GaussianMixture(BaseEstimator):
                 "Method did not converge.",  ConvergenceWarning,
             )
 
-        self.lower_bound_ = lower_bound
         self.fitted = True
         return self
 
+    def predict(self, X):
+        """Predict the labels for the data samples in X using trained model.
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            List of n_features-dimensional data points. Each row
+            corresponds to a single data point.
+        Returns
+        -------
+        labels : array, shape (n_samples,)
+            Component labels.
+        """
+        #if not self.fitted:
+        #    raise("Model must be fitted before predicting any values.")
+        return self._estimate_weighted_log_prob(X).argmax(axis=1)
+    
+    
     def fit_predict(self, X, y=None):
         """Estimate model parameters with the EM algorithm.
         The method iterates between E-step and M-step for ``max_iter``
-        times until the change of likelihood or lower bound is less than
+        times until the change of likelihood is less than
         ``tol``, otherwise, a ``ConvergenceWarning`` is raised.
         Predict the labels for the data samples in X using trained model.
 
@@ -354,29 +373,28 @@ class GaussianMixture(BaseEstimator):
         """Estimate model parameters with the EM algorithm and generate
 		an animation with the results in each iteration. 
         The method iterates between E-step and M-step for ``max_iter``
-        times until the change of likelihood or lower bound is less than
+        times until the change of likelihood is less than
         ``tol``, otherwise, a ``ConvergenceWarning`` is raised.
-
-		
+        
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
             List of n_features-dimensional data points. Each row
             corresponds to a single data point.
-        Returns
-        -------
-        self
         """
         self._initialize(X)
         self.converged_ = False
-        prev_lower_bound = -np.infty
         images = []
         t = np.linspace(0,self.max_iter, self.max_iter)
         bord = 30
         x_lims = [min(X[:,0])-bord,max(X[:,0])+bord]
         y_lims = [min(X[:,1])-bord, max(X[:,1])+bord]
         log = []
+        
+        prev_log_prob = -np.infty
+
         for _ in range(self.max_iter):
+
 
             fig = plt.figure(figsize=(24,8))
             plt.subplot(121)
@@ -395,16 +413,20 @@ class GaussianMixture(BaseEstimator):
             plt.xlim(x_lims)
             plt.ylim(y_lims)
             plt.legend()
-            log_prob_norm, log_resp = self._e_step(X)
-            self._m_step(X, log_resp)
             
-            lower_bound = log_prob_norm
-            change = lower_bound - prev_lower_bound
-            prev_lower_bound = lower_bound
+            # E-step
+            log_prob_norm, log_resp = self._e_step(X)
+            self.log_probs.append(log_prob_norm)
+            # M-step
+            self._m_step(X, log_resp)
+
+            # Compute ELBO change
+            change = log_prob_norm - prev_log_prob
+            prev_log_prob = log_prob_norm 
             
             plt.subplot(122)
             plt.title("Evolution of log likelihood")
-            log.append(lower_bound)
+            log.append(log_prob_norm)
             plt.plot(log, 'r*')
             plt.xlim([0,max(25, _)])
             plt.ylim([-10,0])
@@ -426,18 +448,13 @@ class GaussianMixture(BaseEstimator):
             )
         kwargs_write = {'fps':5.0, 'quantizer':'nq'}
         imageio.mimsave('./gmm_anim.gif', images, fps=5)
-        self.lower_bound_ = lower_bound
         self.fitted = True  
 		
     def make_ellipse(self, cov, mean, ax, n_std=3.0, **kwargs):
         """
-            Adaptado de: https://matplotlib.org/stable/gallery/statistics/confidence_ellipse.html
-            
-            En kwargs se pueden poner todo tipo de argumentos para dibujar la elipse. Por ejemplo
-            para que la elipse sea naranja semitransparente con borde rojo serĂ­a:
-                
-                def make_ellipse(cov, mean, ax, n_std=3.0, facecolor='orange', edgecolor='red', alpha=0.5)
-                
+        Adapted from: https://matplotlib.org/stable/gallery/statistics/confidence_ellipse.html
+           
+        Any additional argument can be passes via **kwargs.
         """
         pearson = cov[0, 1]/np.sqrt(cov[0, 0] * cov[1, 1])
         # Using a special case to obtain the eigenvalues of this
@@ -467,18 +484,3 @@ class GaussianMixture(BaseEstimator):
         ax.scatter(mean_x, mean_y, marker='x', c=color)
         return ax.add_patch(ellipse)
 
-    def predict(self, X):
-        """Predict the labels for the data samples in X using trained model.
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            List of n_features-dimensional data points. Each row
-            corresponds to a single data point.
-        Returns
-        -------
-        labels : array, shape (n_samples,)
-            Component labels.
-        """
-        #if not self.fitted:
-        #    raise("Model must be fitted before predicting any values.")
-        return self._estimate_weighted_log_prob(X).argmax(axis=1)
