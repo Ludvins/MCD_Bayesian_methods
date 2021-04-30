@@ -10,7 +10,14 @@ import warnings
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.cluster import KMeans
 
-
+import matplotlib as mpl
+import matplotlib.transforms as transforms
+from IPython.display import Image as Img
+import matplotlib.pyplot as plt
+import matplotlib.colors as colors
+from matplotlib.patches import Ellipse
+from PIL import Image
+import imageio
 class GaussianMixture(BaseEstimator):
     """Gaussian Mixture model solved using the Expectation maximization 
     algorithm.
@@ -342,6 +349,123 @@ class GaussianMixture(BaseEstimator):
         """
 
         return self.fit(X).predict(X)
+		
+    def fit_plot(self, X, y=None):
+        """Estimate model parameters with the EM algorithm and generate
+		an animation with the results in each iteration. 
+        The method iterates between E-step and M-step for ``max_iter``
+        times until the change of likelihood or lower bound is less than
+        ``tol``, otherwise, a ``ConvergenceWarning`` is raised.
+
+		
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            List of n_features-dimensional data points. Each row
+            corresponds to a single data point.
+        Returns
+        -------
+        self
+        """
+        self._initialize(X)
+        self.converged_ = False
+        prev_lower_bound = -np.infty
+        images = []
+        t = np.linspace(0,self.max_iter, self.max_iter)
+        bord = 30
+        x_lims = [min(X[:,0])-bord,max(X[:,0])+bord]
+        y_lims = [min(X[:,1])-bord, max(X[:,1])+bord]
+        log = []
+        for _ in range(self.max_iter):
+
+            fig = plt.figure(figsize=(24,8))
+            plt.subplot(121)
+            plt.title("Evolution of GMMs")
+
+            y = self.predict(X) 
+
+            for i in range(0,self.n_components): 
+
+                 mu = self.means_[i,:]
+                 cov = self.covariances_[i,:]
+                 plt.scatter(X[y==i,0], X[y==i,1], label=i)
+                 self.make_ellipse(cov, mu, fig.axes[0],facecolor='none',edgecolor='red')
+				 
+            fig.axes[0].axis('equal')
+            plt.xlim(x_lims)
+            plt.ylim(y_lims)
+            plt.legend()
+            log_prob_norm, log_resp = self._e_step(X)
+            self._m_step(X, log_resp)
+            
+            lower_bound = log_prob_norm
+            change = lower_bound - prev_lower_bound
+            prev_lower_bound = lower_bound
+            
+            plt.subplot(122)
+            plt.title("Evolution of log likelihood")
+            log.append(lower_bound)
+            plt.plot(log, 'r*')
+            plt.xlim([0,max(25, _)])
+            plt.ylim([-10,0])
+            fig.canvas.draw()
+            plt.close(fig)
+            
+            image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8')
+            image = image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+     
+            images.append(image)
+
+            if abs(change) < self.tol:
+                self.converged_ = True
+                break
+
+        if not self.converged_:
+            warnings.warn(
+                "Method did not converge.",  ConvergenceWarning,
+            )
+        kwargs_write = {'fps':5.0, 'quantizer':'nq'}
+        imageio.mimsave('./gmm_anim.gif', images, fps=5)
+        self.lower_bound_ = lower_bound
+        self.fitted = True  
+		
+    def make_ellipse(self, cov, mean, ax, n_std=3.0, **kwargs):
+        """
+            Adaptado de: https://matplotlib.org/stable/gallery/statistics/confidence_ellipse.html
+            
+            En kwargs se pueden poner todo tipo de argumentos para dibujar la elipse. Por ejemplo
+            para que la elipse sea naranja semitransparente con borde rojo serĂ­a:
+                
+                def make_ellipse(cov, mean, ax, n_std=3.0, facecolor='orange', edgecolor='red', alpha=0.5)
+                
+        """
+        pearson = cov[0, 1]/np.sqrt(cov[0, 0] * cov[1, 1])
+        # Using a special case to obtain the eigenvalues of this
+        # two-dimensionl dataset.
+        ell_radius_x = np.sqrt(1 + pearson)
+        ell_radius_y = np.sqrt(1 - pearson)
+        ellipse = mpl.patches.Ellipse((0, 0), width=ell_radius_x * 2, height=ell_radius_y * 2, **kwargs)
+        # Calculating the stdandard deviation of x from
+        # the squareroot of the variance and multiplying
+        # with the given number of standard deviations.
+        scale_x = np.sqrt(cov[0, 0]) * n_std
+        mean_x = mean[0]
+        
+        # calculating the stdandard deviation of y ...
+        scale_y = np.sqrt(cov[1, 1]) * n_std
+        mean_y = mean[1]
+        
+        transf = transforms.Affine2D() \
+            .rotate_deg(45) \
+            .scale(scale_x, scale_y) \
+            .translate(mean_x, mean_y)
+        
+        ellipse.set_transform(transf + ax.transData)
+        
+        color = kwargs['edgecolor'] if 'edgecolor' in kwargs else 'red'
+        
+        ax.scatter(mean_x, mean_y, marker='x', c=color)
+        return ax.add_patch(ellipse)
 
     def predict(self, X):
         """Predict the labels for the data samples in X using trained model.
@@ -355,6 +479,6 @@ class GaussianMixture(BaseEstimator):
         labels : array, shape (n_samples,)
             Component labels.
         """
-        if not self.fitted:
-            raise("Model must be fitted before predicting any values.")
+        #if not self.fitted:
+        #    raise("Model must be fitted before predicting any values.")
         return self._estimate_weighted_log_prob(X).argmax(axis=1)
