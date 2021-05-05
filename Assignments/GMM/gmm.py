@@ -30,7 +30,7 @@ class GaussianMixture(BaseEstimator):
 
     tol : float, default=1e-3
         The convergence threshold. EM iterations will stop when the
-        lower bound average gain is below this threshold.
+        log likelihood gain is below this threshold.
 
     reg_covar : float, default=1e-6
         Non-negative regularization added to the diagonal of covariance.
@@ -54,7 +54,7 @@ class GaussianMixture(BaseEstimator):
     Attributes
     ----------
     weights_ : array-like of shape (n_components,)
-        The weights of each mixture components.
+        The weights of each mixture component.
 
     means_ : array-like of shape (n_components, n_features)
         The mean of each mixture component.
@@ -65,10 +65,6 @@ class GaussianMixture(BaseEstimator):
 
     converged_ : bool
         True when convergence was reached in fit(), False otherwise.
-
-    lower_bound_ : float
-        Lower bound value on the log-likelihood (of the training data with
-        respect to the model) of the best fit of EM.
 
     """
     def __init__(
@@ -146,9 +142,8 @@ class GaussianMixture(BaseEstimator):
             Probability of each component.
         means : array-like of shape (n_components, n_features)
             The centers of the current components.
-        covariances : array-like
+        covariances : array-like of shape (n_components, n_features, n_features)
             The covariance matrix of the current components.
-            The shape depends of the covariance_type.
         """
         _, n_components = resp.shape
         n_samples, n_features = X.shape
@@ -185,7 +180,8 @@ class GaussianMixture(BaseEstimator):
                                  "covariance (for instance caused by singleton"
                                  " or collapsed samples). Try to decrease the "
                                  "number of components, or increase reg_covar.")
-    
+                
+            # Precision matrix is inverse of covariance matrix
             self.precisions_cholesky_[k] = solve_triangular(cov_chol,
                                                          np.eye(n_features),
                                                          lower=True).T 
@@ -234,26 +230,6 @@ class GaussianMixture(BaseEstimator):
         """ 
         return self._estimate_log_gaussian_prob(X) + np.log(self.weights_)
         
-
-    def _estimate_log_prob_resp(self, X):
-        """Estimate log probabilities and responsibilities for each sample.
-        
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-        Returns
-        -------
-        log_prob_norm : array, shape (n_samples,)
-            log p(X)
-        log_responsibilities : array, shape (n_samples, n_components)
-            logarithm of the responsibilities
-        """
-        
-        weighted_log_prob = self._estimate_weighted_log_prob(X)
-        log_prob_norm = logsumexp(weighted_log_prob, axis=1)
-        log_resp = weighted_log_prob - log_prob_norm[:, np.newaxis]
-        return log_prob_norm, log_resp
-
     def _e_step(self, X):
         """E step.
         Parameters
@@ -263,11 +239,13 @@ class GaussianMixture(BaseEstimator):
         -------
         log_prob_norm : float
             Mean of the logarithms of the probabilities of each sample in X
-        log_responsibility : array, shape (n_samples, n_components)
+        log_res : array, shape (n_samples, n_components)
             Logarithm of the posterior probabilities (or responsibilities) of
             the point of each sample in X.
         """
-        log_prob_norm, log_resp = self._estimate_log_prob_resp(X)
+        weighted_log_prob = self._estimate_weighted_log_prob(X)
+        log_prob_norm = logsumexp(weighted_log_prob, axis=1)
+        log_resp = weighted_log_prob - log_prob_norm[:, np.newaxis]
         return np.mean(log_prob_norm), log_resp
 
     def _m_step(self, X, log_resp):
@@ -310,14 +288,14 @@ class GaussianMixture(BaseEstimator):
 
         for _ in range(self.max_iter):
             # E-step
-            log_prob_norm, log_resp = self._e_step(X)
-            self.log_probs.append(log_prob_norm)
+            log_prob, log_resp = self._e_step(X)
+            self.log_probs.append(log_prob)
             # M-step
             self._m_step(X, log_resp)
 
-            # Compute ELBO change
-            change = log_prob_norm - prev_log_prob
-            prev_log_prob = log_prob_norm 
+            # Compute log-likelihood change
+            change = log_prob - prev_log_prob
+            prev_log_prob = log_prob
             
             # Check convergence criteria
             if abs(change) < self.tol:
@@ -344,8 +322,6 @@ class GaussianMixture(BaseEstimator):
         labels : array, shape (n_samples,)
             Component labels.
         """
-        #if not self.fitted:
-        #    raise("Model must be fitted before predicting any values.")
         return self._estimate_weighted_log_prob(X).argmax(axis=1)
     
     
@@ -420,7 +396,7 @@ class GaussianMixture(BaseEstimator):
             # M-step
             self._m_step(X, log_resp)
 
-            # Compute ELBO change
+            # Compute log-likelihood change
             change = log_prob_norm - prev_log_prob
             prev_log_prob = log_prob_norm 
             
