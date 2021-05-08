@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Authors: 
+#  Luis Antonio Ortega Andrés
+#  Juan Ignacio Álvarez Trejos
 
 from re import A
 import numpy as np
