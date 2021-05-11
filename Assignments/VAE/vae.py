@@ -1,8 +1,11 @@
 # Implements a variational auto-encoder for the MNIST problem.
+#
+# Authors: Daniel Hernandez Lobato
+#          Luis Antonio Ortega Andrés
+#          Juan Ignacio Álvarez Trejos
 
 import autograd.numpy as np
 import autograd.numpy.random as npr
-import autograd.scipy.stats.norm as norm
 
 from autograd import grad
 from data import load_mnist
@@ -44,7 +47,8 @@ def init_net_params(layer_sizes, scale=1e-2):
      - array of (weights, biases) for each layer.
     """
     return [
-        (scale * npr.randn(m, n), scale * npr.randn(n))  # (weight matrix, bias vector)
+        # (weight matrix, bias vector)
+        (scale * npr.randn(m, n), scale * npr.randn(n))
         for m, n in zip(layer_sizes[:-1], layer_sizes[1:])
     ]
 
@@ -62,9 +66,6 @@ def batch_normalize(batch):
     Returns:
      - Normalized batch
     """
-    # If batch has one element skip normalization
-    if batch.shape[0] == 1:
-        return batch
     # Compute mean and standard deviation.
     batch_mean = np.mean(batch, axis=0, keepdims=True)
     batch_std = np.std(batch, axis=0, keepdims=True)
@@ -72,13 +73,14 @@ def batch_normalize(batch):
     return (batch - batch_mean) / (batch_std + 0.01)
 
 
-def neural_net_predict(params, inputs):
+def neural_net_predict(params, inputs, normalize=True):
     """This computes the output of a deep neural network with params a
     list with pairs of weights and biases
 
     Arguments:
      - Params: list of (weights, bias) tuples.
      - inputs: (N x D) matrix.
+     - normalize: boolean. Whether to apply batch normalization or not.
 
     Returns:
      - outputs: np.darray of shape (params[-1].shape)
@@ -88,7 +90,8 @@ def neural_net_predict(params, inputs):
 
     for W, b in params[:-1]:
         outputs = np.dot(inputs, W) + b  # linear transformation
-        outputs = batch_normalize(outputs)
+        if normalize:
+            outputs = batch_normalize(outputs)
         inputs = relu(outputs)  # nonlinear transformation
 
     # Last layer is linear
@@ -197,7 +200,8 @@ def vae_lower_bound(gen_params, rec_params, data):
                     neural_net_predict
      - data:        Array-like of shape (batch_size, n_features) containing
                     the data.
-
+    Returns:
+        - Noisy estimate of the variational lower bound.
     """
 
     # Compute the encoder output using neural_net_predict given the data
@@ -229,8 +233,10 @@ if __name__ == "__main__":
     n_units = 200
     n_layers = 2
 
-    gen_layer_sizes = [latent_dim] + [n_units for i in range(n_layers)] + [data_dim]
-    rec_layer_sizes = [data_dim] + [n_units for i in range(n_layers)] + [latent_dim * 2]
+    gen_layer_sizes = [latent_dim] + [n_units for i in range(n_layers)] \
+                    + [data_dim]
+    rec_layer_sizes = [data_dim] + [n_units for i in range(n_layers)] \
+                    + [latent_dim * 2]
 
     # Training parameters
     batch_size = 200
@@ -239,7 +245,7 @@ if __name__ == "__main__":
 
     print("Loading training data...")
 
-    N, train_images, _, test_images, _ = load_mnist(sklearn=True)
+    N, train_images, _, test_images, _ = load_mnist()
 
     print("Done")
 
@@ -254,7 +260,7 @@ if __name__ == "__main__":
     num_batches = int(np.ceil(len(train_images) / batch_size))
 
     # We flatten the parameters
-    flattened_combined_params, unflat_params = flatten(combined_params_init)
+    flattened_combined_params_init, unflat_params = flatten(combined_params_init)
 
     # Actual objective to optimize that receives flattened params
     def objective(flattened_combined_params):
@@ -274,7 +280,7 @@ if __name__ == "__main__":
 
     # Get gradients of objective using autograd.
     objective_grad = grad(objective)
-    flattened_current_params = flattened_combined_params
+    flattened_current_params = flattened_combined_params_init
 
     # ADAM parameters
     # the initial values for the ADAM parameters
@@ -283,7 +289,7 @@ if __name__ == "__main__":
     alpha = 0.001
     beta1 = 0.9
     beta2 = 0.999
-    epsilon = 10 ** -8
+    epsilon = 1e-8
     m = np.zeros_like(flattened_current_params)
     v = np.zeros_like(flattened_current_params)
 
@@ -315,7 +321,7 @@ if __name__ == "__main__":
 
             t += 1
 
-        print("Epoch: %d ELBO: %e" % (epoch, elbo_est / np.ceil(N / batch_size)))
+        print("Epoch: %d ELBO: %e" % (epoch, elbo_est / np.ceil(N/batch_size)))
 
     # We obtain the final trained parameters
     gen_params, rec_params = unflat_params(flattened_current_params)
@@ -348,18 +354,19 @@ if __name__ == "__main__":
     num_interpolations = 5
 
     for i in range(5):
-        # Get output of neural network.
-        first_image = neural_net_predict(rec_params, test_images[2 * i, :]).reshape(
-            1, -1
+        # Get output of neural network. Output has shape (2D,)
+        #
+        first_image = neural_net_predict(
+            rec_params, test_images[2 * i, :], normalize=False
         )
         second_image = neural_net_predict(
-            rec_params, test_images[2 * i + 1, :]
-        ).reshape(1, -1)
+            rec_params, test_images[2 * i + 1, :], normalize=False
+        )
 
         # Get hidden representation from the mean of the recognition model.
-        D = np.shape(first_image)[-1] // 2
-        latents1 = first_image[:, :D]
-        latents2 = second_image[:, :D]
+        D = np.shape(first_image)[0] // 2
+        latents1 = first_image[:D, :]
+        latents2 = second_image[:D, :]
 
         # Get interpolation scalars
         S = np.linspace(0, 1, 25)
@@ -368,5 +375,5 @@ if __name__ == "__main__":
         interp = np.array([s * latents1 + (1 - i) * latents2 for s in S])
 
         # Get image from neural network and plot the result
-        image = neural_net_predict(gen_params, interp)
+        image = neural_net_predict(gen_params, interp, normalize=False)
         save_images(sigmoid(image), "interpolation" + str(i))
