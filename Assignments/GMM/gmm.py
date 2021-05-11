@@ -216,7 +216,7 @@ class GaussianMixture(BaseEstimator):
             y = np.dot(X, prec_chol) - np.dot(mu, prec_chol)
             log_prob[:, k] = np.sum(np.square(y), axis=1)
         
-        return -.5 * (n_features * np.log(2 * np.pi) + log_prob) + log_det
+        return -.5 * (n_features * np.log(2 * np.pi) + log_prob) + .5 * n_features * log_det
     
     def _estimate_weighted_log_prob(self, X):
         """ Estimate the weighted log probabilities for each sample.

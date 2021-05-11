@@ -264,4 +264,5 @@ if __name__ == "__main__":
         # I * s + (1-s) * G where s is a sequence of numbers from 0 to 1 obtained by numpy.linspace
         # Use mean of the recognition model as the latent representation.
 
+
         pass
