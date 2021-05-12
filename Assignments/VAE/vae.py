@@ -240,7 +240,7 @@ if __name__ == "__main__":
 
     # Training parameters
     batch_size = 200
-    num_epochs = 30
+    num_epochs = 5
     learning_rate = 0.001
 
     print("Loading training data...")
@@ -357,16 +357,16 @@ if __name__ == "__main__":
         # Get output of neural network. Output has shape (2D,) given that
         # batch size is "1".
         first_image = neural_net_predict(
-            rec_params, test_images[2 * i, :], normalize=False
+            rec_params, [test_images[2 * i]], normalize=False
         )
         second_image = neural_net_predict(
-            rec_params, test_images[2 * i + 1, :], normalize=False
+            rec_params, [test_images[2 * i + 1]], normalize=False
         )
 
         # Get hidden representation from the mean of the recognition model.
-        D = np.shape(first_image)[0] // 2
-        latents1 = first_image[:D]
-        latents2 = second_image[:D]
+        D = np.shape(first_image)[1] // 2
+        latents1 = first_image[:, :D]
+        latents2 = second_image[:, :D]
 
         # Get interpolation scalars
         S = np.linspace(0, 1, 25)
