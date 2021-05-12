@@ -62,7 +62,7 @@ The main objective of this assignment is to develop a variational autoencoder us
 
  \textbf{Task 1.} \emph{Complete the missing parts of the code to allow for training a VAE on the MNIST dataset.}
 
- We are briefly reviewing the implemented steps for each of the four functions designed to this task. Let us begin with \texttt{sample\_latent\_variables\_posterior}, the main aim of this function is to generate an unique sample from \( Q(z \mid x) \) for each \( x \) in the given batch. To this end, the mean and variance of each factor \( Q \) is given as input for the function. These values can be retieved form the first and last half over the last axis. In order to return the desired samples we are using the decomposition property of the Gaussian distribution, that is
+ We are briefly reviewing the implemented steps for each of the four functions designed for this task. Let us begin with \texttt{sample\_latent\_variables\_posterior}, the main aim of this function is to generate an unique sample from \( Q(z \mid x) \) for each \( x \) in the given batch. To this end, the mean and variance of each factor \( Q \) is given as input for the function. These values can be retrieved from the first and last half over the last axis. In order to return the desired samples we are using the decomposition property of the Gaussian distribution, that is
  \[
    \mathcal{N}(\mu, \sigma^{2}) = \mu + \sigma \mathcal{N}(0, 1).
  \]
@@ -145,5 +145,74 @@ With initial values given by
   m = np.zeros_like(flattened_current_params)
   v = np.zeros_like(flattened_current_params)
 \end{minted}
+
+
+\textbf{Task 3.1.} \emph{Generate \( 25 \) images from the generative model. This should be done by drawing \( \bm{z} \) from the prior, to then generate \( \bm{x} \) using the conditional distribution \( P_{\theta}(\bm{x} \mid \bm{z}) \). Set the pixel intensity of the image equal to the activation probability. Do not binarizethe images.}
+
+The needed block of code for this subtask generates \( 25 \) samples from the prior distribution \( \mathcal{N}(0, 1) \), computes the higher dimensional representation using the output of the neural network and saves the given images.
+
+\begin{minted}{python}
+    z_samples_prior = npr.randn(25, latent_dim)
+    x_samples = neural_net_predict(gen_params, z_samples_prior)
+    save_images(sigmoid(x_samples), "images_from_prior")
+\end{minted}
+
+The generated images can be seen at
+\begin{figure}[H]
+  \centering
+  \includegraphics[scale = 0.5]{imgs/images_from_prior.png}
+\end{figure}
+
+
+\textbf{Task 3.2.} \emph{Generate 10 image reconstructions using the recognition model and then the generative model. Choose the first \( 10 \)  images from the test set. The reconstructions are obtained by generating \( \bm{z} \)  using \( Q_{\phi}(\bm{z} \mid \bm{x}) \)  and then generating \( \bm{x} \)  again using \( P_{\theta}(\bm{x} \mid \bm{z}) \). Set the pixel intensity of the image equal to the activation probability.}
+
+The needed steps to complete this task correspondto the first three steps done in \texttt{vae\_lower\_bound}:
+\begin{minted}{python}
+    output = neural_net_predict(params=rec_params, inputs=test_images[:10])
+    latents = sample_latent_variables_from_posterior(output)
+    decoding = neural_net_predict(gen_params, latents)
+    save_images(np.append(test_images[:10], sigmoid(decoding), axis = 0),
+                "reconstructions")
+
+\end{minted}
+
+
+The obtained reconstructions are the following
+\begin{figure}[H]
+  \centering
+  \includegraphics[scale = 0.5]{imgs/reconstructions.png}
+\end{figure}
+
+\textbf{Task 3.3.} \emph{Generate \( 5 \)  interpolations in the latent space from one image to another. Consider the first and second image in the test set, the third and fourth image in the test set and so on. The interpolations should be obtained by finding the latent representation of each image. Consider only the mean of the predictive model \( Q(\bm{z} \mid \bm{x}) \)  as the latent representation. Ignore the variance.}
+
+Given a pair of images \texttt{image1} and \texttt{image2}, the needed steps (with simplified code) to compute the interpolation are:
+\begin{enumerate}
+  \item Compute the output of the neural network for each image.
+        \begin{minted}{python}
+  first_image = neural_net_predict(rec_params, image1)
+  second_image = neural_net_predict(rec_params, image2)
+\end{minted}
+  \item Get hidden representation from the mean values:
+        \begin{minted}{python}
+  latents1 = first_image[:, :D]
+  latents2 = second_image[:, :D]
+\end{minted}
+
+  \item Compute interpolation scalars.
+        \begin{minted}{python}
+  S = np.linspace(0, 1, interpolation_steps)[::-1]
+\end{minted}
+  \item Compute interpolation
+        \begin{minted}{python}
+  interp = np.array([s * latents1 + (1 - s) * latents2 for s in S])
+        \end{minted}
+  \item Reconstruct interpolated image.
+        \begin{minted}{python}
+  image = neural_net_predict(gen_params, interp)
+          \end{minted}
+\end{enumerate}
+
+
+
 
 \end{document}

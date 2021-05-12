@@ -56,7 +56,7 @@ def init_net_params(layer_sizes, scale=1e-2):
 def batch_normalize(batch):
     """Applies batch normalization to the given batch as
     ```
-      (batch - mu)/(std + 0.001)
+      (batch - mu)/(std + 1)
     ```
     over the first axis.
 
@@ -70,6 +70,7 @@ def batch_normalize(batch):
     batch_mean = np.mean(batch, axis=0, keepdims=True)
     batch_std = np.std(batch, axis=0, keepdims=True)
     # Adding 1 to avoid dividing by zero in any situation.
+    # This parameter has been fixed by experimentation
     return (batch - batch_mean) / (batch_std + 1)
 
 
@@ -255,12 +256,12 @@ if __name__ == "__main__":
     # Parameters for the recognition network p(z|x)
     init_rec_params = init_net_params(rec_layer_sizes)
 
-    combined_params_init = (init_gen_params, init_rec_params)
+    combined_params_in = (init_gen_params, init_rec_params)
 
     num_batches = int(np.ceil(len(train_images) / batch_size))
 
     # We flatten the parameters
-    flattened_combined_params_init, unflat_params = flatten(combined_params_init)
+    flattened_combined_params_init, unflat_params = flatten(combined_params_in)
 
     # Actual objective to optimize that receives flattened params
     def objective(flattened_combined_params):
@@ -340,7 +341,8 @@ if __name__ == "__main__":
     output = neural_net_predict(params=rec_params, inputs=test_images[:10])
     latents = sample_latent_variables_from_posterior(output)
     decoding = neural_net_predict(gen_params, latents)
-    save_images(sigmoid(decoding), "reconstructions")
+    save_images(np.append(test_images[:10], sigmoid(decoding), axis = 0),
+                "reconstructions")
 
     # TASK 3.3
 
@@ -352,8 +354,9 @@ if __name__ == "__main__":
     # by numpy.linspace
     # Use mean of the recognition model as the latent representation.
     num_interpolations = 5
+    interpolation_steps = 25
 
-    for i in range(5):
+    for i in range(num_interpolations):
         # Get output of neural network. Output has shape (2D,) given that
         # batch size is "1".
         first_image = neural_net_predict(
@@ -365,15 +368,17 @@ if __name__ == "__main__":
 
         # Get hidden representation from the mean of the recognition model.
         D = np.shape(first_image)[1] // 2
-        latents1 = first_image[:, :D]
-        latents2 = second_image[:, :D]
+        latents1 = np.array(first_image[:, :D])
+        latents2 = np.array(second_image[:, :D])
 
         # Get interpolation scalars
-        S = np.linspace(0, 1, 25)
+        S = np.linspace(0, 1, interpolation_steps)[::-1]
 
         # Compute batch of interpolations
         interp = np.array([s * latents1 + (1 - s) * latents2 for s in S])
+        # Reshape to (interpolations_steps, n_features)
+        interp = interp.reshape(interpolation_steps, -1)
 
         # Get image from neural network and plot the result
         image = neural_net_predict(gen_params, interp, normalize=False)
-        save_images(sigmoid(image), "interpolation" + str(i))
+        save_images(sigmoid(image), "interpolation_" + str(i))
