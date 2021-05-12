@@ -69,12 +69,12 @@ def batch_normalize(batch):
     # Compute mean and standard deviation.
     batch_mean = np.mean(batch, axis=0, keepdims=True)
     batch_std = np.std(batch, axis=0, keepdims=True)
-    # Adding 0.01 to avoid dividing by zero in any situation.
-    return (batch - batch_mean) / (batch_std + 0.01)
+    # Adding 1 to avoid dividing by zero in any situation.
+    return (batch - batch_mean) / (batch_std + 1)
 
 
 def neural_net_predict(params, inputs, normalize=True):
-    """This computes the output of a deep neural network with params a
+    """Computes the output of a deep neural network with params a
     list with pairs of weights and biases
 
     Arguments:
@@ -184,7 +184,7 @@ def compute_KL(q_means_and_log_stds):
     # Compute the KL divergenve of each element in the batch
     KL = 0.5 * (np.exp(2 * log_std) + mean ** 2 - 1 - 2 * log_std)
     # Sum across the batch
-    return np.sum(KL)
+    return np.sum(KL, axis = -1)
 
 
 def vae_lower_bound(gen_params, rec_params, data):
@@ -240,7 +240,7 @@ if __name__ == "__main__":
 
     # Training parameters
     batch_size = 200
-    num_epochs = 1
+    num_epochs = 30
     learning_rate = 0.001
 
     print("Loading training data...")
@@ -289,7 +289,7 @@ if __name__ == "__main__":
     alpha = 0.001
     beta1 = 0.9
     beta2 = 0.999
-    epsilon = 1e-8
+    epsilon = 10**-8
     m = np.zeros_like(flattened_current_params)
     v = np.zeros_like(flattened_current_params)
 
@@ -331,7 +331,7 @@ if __name__ == "__main__":
     # them using save_images
     z_samples_prior = npr.randn(25, latent_dim)
     x_samples = neural_net_predict(gen_params, z_samples_prior)
-    save_images(sigmoid(x_samples), "Images from prior")
+    save_images(sigmoid(x_samples), "images_from_prior")
 
     # TASK 3.2
     # Generate image reconstructions for the first 10 test images
@@ -340,7 +340,7 @@ if __name__ == "__main__":
     output = neural_net_predict(params=rec_params, inputs=test_images[:10])
     latents = sample_latent_variables_from_posterior(output)
     decoding = neural_net_predict(gen_params, latents)
-    save_images(sigmoid(decoding), "Reconstructions")
+    save_images(sigmoid(decoding), "reconstructions")
 
     # TASK 3.3
 
@@ -372,7 +372,7 @@ if __name__ == "__main__":
         S = np.linspace(0, 1, 25)
 
         # Compute batch of interpolations
-        interp = np.array([s * latents1 + (1 - i) * latents2 for s in S])
+        interp = np.array([s * latents1 + (1 - s) * latents2 for s in S])
 
         # Get image from neural network and plot the result
         image = neural_net_predict(gen_params, interp, normalize=False)
