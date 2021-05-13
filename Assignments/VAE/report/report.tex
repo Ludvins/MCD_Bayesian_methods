@@ -62,7 +62,7 @@ The main objective of this assignment is to develop a variational autoencoder us
 
  \textbf{Task 1.} \emph{Complete the missing parts of the code to allow for training a VAE on the MNIST dataset.}
 
- We are briefly reviewing the implemented steps for each of the four functions designed for this task. Let us begin with \texttt{sample\_latent\_variables\_posterior}, the main aim of this function is to generate an unique sample from \( Q(z \mid x) \) for each \( x \) in the given batch. To this end, the mean and variance of each factor \( Q \) is given as input for the function. These values can be retrieved from the first and last half over the last axis. In order to return the desired samples we are using the decomposition property of the Gaussian distribution, that is
+ We are briefly reviewing the implemented steps for each of the four functions designed for this task. Let us begin with \texttt{sample\_latent\_variables\_posterior}, the main aim of this function is to generate an unique sample from \( Q(z \mid x) \) for each \( x \) in the given batch. To this end, the mean and variance of each factor \( Q \) is given as input for the function. In order to return the desired samples we are using the decomposition property of the Gaussian distribution, that is
  \[
    \mathcal{N}(\mu, \sigma^{2}) = \mu + \sigma \mathcal{N}(0, 1).
  \]
@@ -73,20 +73,20 @@ The main objective of this assignment is to develop a variational autoencoder us
    return mean + z * np.exp(log_std)
  \end{minted}
 
- The \texttt{bernoulli\_log\_prob} function aims to return the log-likelihood of the actual data given the computed logits using the output of the neural netork, that is, to compute
+ The \texttt{bernoulli\_log\_prob} function aims to return the log-likelihood of the actual data given the computed logits using the output of the neural network, that is, to compute
  \[
    \begin{aligned}
      \log P(\bm{x} \mid \bm{z}) &= \sum_{x \in \bm{x}}\log\Big(p(x)^{x} + (1-p(x))^{(1-x)}\Big)\\
       &= \sum_{x \in \bm{x}}\log\Big( x\ p(x) + (1-x)\ (1-p(x))\Big).
      \end{aligned}
   \]
-  To this end, it is needed to compute the probabilities fro the given logits using the sigmoid function:
+  To this end, it is needed to compute the probabilities for the given logits using the sigmoid activation:
   \begin{minted}{python}
     probs = sigmoid(logits)
     log_prob = np.log(targets * probs + (1 - targets) * (1 - probs))
     return np.sum(log_prob, axis=-1)
   \end{minted}
-  On the other hand, function \texttt{compute\_KL} is used to compute the Kullback-Leibler divergence between the variational distribution \( Q(\bm{z} \mid \bm{x}) \)  and the prior distirbution \( \mathcal{N}(0, I)\). Given that both distributions are Gaussian, their KL divergence has a closed form which is in turn simplified given the form of the prior. More precisely,
+  On the other hand, function \texttt{compute\_KL} is used to compute the Kullback-Leibler divergence between the variational distribution \( Q(\bm{z} \mid \bm{x}) \)  and the prior distirbution \( \mathcal{N}(0, I)\). Given that both distributions are Gaussian, their KL divergence has a closed form which is in turn simplified given that both are diagonal Gaussians. More precisely,
   \[
     \mathcal{KL}\Big( \mathcal{N}\big((\mu_{1}, \dots, \mu_{k})^{T}, \text{diag}(\sigma^{2}_{1}, \dots, \sigma^{2}_{k}) \big) \mid \mathcal{N}(\bm{0}, \bm{I}) \Big) = \frac{1}{2}\sum_{i=1}^{k}\left( \sigma_{i}^{2} + \mu_{i}^{2} - 1 - \log\sigma_{i}^{2} \right).
   \]
@@ -146,6 +146,11 @@ With initial values given by
   v = np.zeros_like(flattened_current_params)
 \end{minted}
 
+\begin{figure}[H]
+  \centering
+  \includegraphics[scale = 0.3]{imgs/elbo.png}
+  \caption{Evolution of the ELBO during 30 training epochs.}
+  \end{figure}
 
 \textbf{Task 3.1.} \emph{Generate \( 25 \) images from the generative model. This should be done by drawing \( \bm{z} \) from the prior, to then generate \( \bm{x} \) using the conditional distribution \( P_{\theta}(\bm{x} \mid \bm{z}) \). Set the pixel intensity of the image equal to the activation probability. Do not binarizethe images.}
 
@@ -157,10 +162,11 @@ The needed block of code for this subtask generates \( 25 \) samples from the pr
     save_images(sigmoid(x_samples), "images_from_prior")
 \end{minted}
 
-The generated images can be seen at
+The generated images can be seen at Figure~\ref{img:3.1}.
 \begin{figure}[H]
   \centering
   \includegraphics[scale = 0.5]{imgs/images_from_prior.png}
+  \caption{Generated images from the prior distibution \( \mathcal{N}(0, I) \). }\label{img:3.1}
 \end{figure}
 
 
@@ -177,10 +183,11 @@ The needed steps to complete this task correspondto the first three steps done i
 \end{minted}
 
 
-The obtained reconstructions are the following
+The obtained reconstructions are shown in Figure~\ref{img:3.2}.
 \begin{figure}[H]
   \centering
   \includegraphics[scale = 0.5]{imgs/reconstructions.png}
+  \caption{Original data samples (first two rows) and their reconstruction through the autoencoder (last two rows)}\label{img:3.2}
 \end{figure}
 
 \textbf{Task 3.3.} \emph{Generate \( 5 \)  interpolations in the latent space from one image to another. Consider the first and second image in the test set, the third and fourth image in the test set and so on. The interpolations should be obtained by finding the latent representation of each image. Consider only the mean of the predictive model \( Q(\bm{z} \mid \bm{x}) \)  as the latent representation. Ignore the variance.}
@@ -212,6 +219,12 @@ Given a pair of images \texttt{image1} and \texttt{image2}, the needed steps (wi
           \end{minted}
 \end{enumerate}
 
+The obtained reconstructions can be seen in Figure~\ref{img:3.3}.
+\begin{figure}[H]
+  \centering
+  \includegraphics[scale = 0.3]{imgs/interpolations.png}
+  \caption{Reconstruction of latent interpolation of data samples.}\label{img:3.3}
+\end{figure}
 
 
 

@@ -53,46 +53,21 @@ def init_net_params(layer_sizes, scale=1e-2):
     ]
 
 
-def batch_normalize(batch):
-    """Applies batch normalization to the given batch as
-    ```
-      (batch - mu)/(std + 1)
-    ```
-    over the first axis.
-
-    Arguments:
-     - batch: Array like of shape [batch_size,...]
-
-    Returns:
-     - Normalized batch
-    """
-    # Compute mean and standard deviation.
-    batch_mean = np.mean(batch, axis=0, keepdims=True)
-    batch_std = np.std(batch, axis=0, keepdims=True)
-    # Adding 1 to avoid dividing by zero in any situation.
-    # This parameter has been fixed by experimentation
-    return (batch - batch_mean) / (batch_std + 1)
-
-
-def neural_net_predict(params, inputs, normalize=True):
+def neural_net_predict(params, inputs):
     """Computes the output of a deep neural network with params a
     list with pairs of weights and biases
 
     Arguments:
      - Params: list of (weights, bias) tuples.
      - inputs: (N x D) matrix.
-     - normalize: boolean. Whether to apply batch normalization or not.
 
     Returns:
      - outputs: np.darray of shape (params[-1].shape)
 
-    Applies batch normalization to every layer but the last.
     """
 
     for W, b in params[:-1]:
         outputs = np.dot(inputs, W) + b  # linear transformation
-        if normalize:
-            outputs = batch_normalize(outputs)
         inputs = relu(outputs)  # nonlinear transformation
 
     # Last layer is linear
@@ -216,7 +191,6 @@ def vae_lower_bound(gen_params, rec_params, data):
     # the log_prob of the actual data
     x_samples = neural_net_predict(gen_params, latents)
     log_prob = bernoulli_log_prob(data, x_samples)
-
     # Compute the KL divergence between q(z|x) and the prior
     KL = compute_KL(output)
 
@@ -241,7 +215,7 @@ if __name__ == "__main__":
 
     # Training parameters
     batch_size = 200
-    num_epochs = 5
+    num_epochs = 30
     learning_rate = 0.001
 
     print("Loading training data...")
@@ -360,10 +334,10 @@ if __name__ == "__main__":
         # Get output of neural network. Output has shape (2D,) given that
         # batch size is "1".
         first_image = neural_net_predict(
-            rec_params, [test_images[2 * i]], normalize=False
+            rec_params, [test_images[2 * i]]
         )
         second_image = neural_net_predict(
-            rec_params, [test_images[2 * i + 1]], normalize=False
+            rec_params, [test_images[2 * i + 1]]
         )
 
         # Get hidden representation from the mean of the recognition model.
@@ -380,5 +354,5 @@ if __name__ == "__main__":
         interp = interp.reshape(interpolation_steps, -1)
 
         # Get image from neural network and plot the result
-        image = neural_net_predict(gen_params, interp, normalize=False)
+        image = neural_net_predict(gen_params, interp)
         save_images(sigmoid(image), "interpolation_" + str(i))
