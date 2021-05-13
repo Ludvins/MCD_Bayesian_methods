@@ -116,7 +116,7 @@ Lastly, \texttt{vae\_lower\_bound} is used to compute a noisy estimate of the lo
         \begin{minted}{python}
   KL = compute_KL(output)
         \end{minted}
-  \item Estimate the lower bound by substracting the KL to the data dependent term
+  \item Estimate the lower bound (ELBO) by substracting the KL to the data dependent term
         \begin{minted}{python}
   return np.mean(log_prob - KL, axis=-1)
         \end{minted}
@@ -146,11 +146,6 @@ With initial values given by
   v = np.zeros_like(flattened_current_params)
 \end{minted}
 
-\begin{figure}[H]
-  \centering
-  \includegraphics[scale = 0.3]{imgs/elbo.png}
-  \caption{Evolution of the ELBO during 30 training epochs.}
-  \end{figure}
 
 \textbf{Task 3.1.} \emph{Generate \( 25 \) images from the generative model. This should be done by drawing \( \bm{z} \) from the prior, to then generate \( \bm{x} \) using the conditional distribution \( P_{\theta}(\bm{x} \mid \bm{z}) \). Set the pixel intensity of the image equal to the activation probability. Do not binarizethe images.}
 
@@ -172,7 +167,7 @@ The generated images can be seen at Figure~\ref{img:3.1}.
 
 \textbf{Task 3.2.} \emph{Generate 10 image reconstructions using the recognition model and then the generative model. Choose the first \( 10 \)  images from the test set. The reconstructions are obtained by generating \( \bm{z} \)  using \( Q_{\phi}(\bm{z} \mid \bm{x}) \)  and then generating \( \bm{x} \)  again using \( P_{\theta}(\bm{x} \mid \bm{z}) \). Set the pixel intensity of the image equal to the activation probability.}
 
-The needed steps to complete this task correspondto the first three steps done in \texttt{vae\_lower\_bound}:
+The needed steps to complete this task correspond to the first three steps done in \texttt{vae\_lower\_bound}:
 \begin{minted}{python}
     output = neural_net_predict(params=rec_params, inputs=test_images[:10])
     latents = sample_latent_variables_from_posterior(output)
@@ -226,6 +221,19 @@ The obtained reconstructions can be seen in Figure~\ref{img:3.3}.
   \caption{Reconstruction of latent interpolation of data samples.}\label{img:3.3}
 \end{figure}
 
+\textbf{Training results.}
+
+Once the Adam optimizer is complete, we might train the autoencoder over the considered set of samples. In this assignment, we used 30 training epochs and the evolution of the evidence lower bound (ELBO) can be seen in Figure~\ref{img:elbo}.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[scale = 0.3]{imgs/elbo.png}
+  \caption{Evolution of the ELBO during 30 training epochs.}\label{img:elbo}
+\end{figure}
+
+In the figure, we can see how the computed lower bound follows the usual evolution of a negated loss function, lowering its improvement rate as each iteration is done.
+
+We know that maximizing the ELBO improves the model in two ways: firstly, it increases the likelihood of the data given the model, and secondly, it reduces the KL divergence between the variational distribution and the intractable posterior \( P(\bm{z} \mid \bm{x}) \).
 
 
 \end{document}
